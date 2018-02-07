@@ -22,12 +22,10 @@ void GLSLShader::LoadFromString(GLenum shaderType, const std::string& source) {
 
     glGetShaderiv(newShader, GL_COMPILE_STATUS, &Result);
     glGetShaderiv(newShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
-    if ( InfoLogLength > 0 ) {
-        char* ErrorMessage = new char[InfoLogLength + 1];
-        glGetProgramInfoLog(program_, InfoLogLength, NULL, ErrorMessage);
-        std::cerr << "Error while loading shader: " << std::endl;
-        std::cerr << ErrorMessage << std::endl;
-        delete [] ErrorMessage;
+    if ( InfoLogLength > 0 ){
+        std::vector<char> ErrorMessage(InfoLogLength+1);
+        glGetShaderInfoLog(newShader, InfoLogLength, NULL, &ErrorMessage[0]);
+        printf("%s\n", &ErrorMessage[0]);
         return;
     }
     shaders_.push_back(newShader);
@@ -58,11 +56,10 @@ void GLSLShader::CreateAndLinkProgram() {
     glGetProgramiv(program_, GL_LINK_STATUS, &Result);
     glGetProgramiv(program_, GL_INFO_LOG_LENGTH, &InfoLogLength);
     if ( InfoLogLength > 0 ){
-        char* ErrorMessage = new char[InfoLogLength + 1];
-        glGetProgramInfoLog(program_, InfoLogLength, NULL, ErrorMessage);
+        std::vector<char> ErrorMessage(InfoLogLength + 1);
+        glGetProgramInfoLog(program_, InfoLogLength, NULL, &ErrorMessage[0]);
         std::cerr << "Error while compiling and linking program: " << std::endl;
-        std::cerr << ErrorMessage << std::endl;
-        delete [] ErrorMessage;
+        printf("%s\n", &ErrorMessage[0]);
     }
 
     for (int i = 0; i < shaders_.size(); i++) {

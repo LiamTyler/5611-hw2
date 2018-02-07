@@ -20,7 +20,12 @@ inline ostream& operator <<(ostream& out, const vec3& v) {
     return out;
 }
 
-// GLuint LoadTexture(string path);
+inline ostream& operator <<(ostream& out, const vec4& v) {
+    out << v.x << " " << v.y << " " << v.z << " " << v.w;
+    return out;
+}
+
+GLuint LoadTexture(string path);
 
 SDL_Window* InitAndWindow(string title, int ox, int oy, int w, int h);
 

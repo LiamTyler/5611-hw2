@@ -7,7 +7,28 @@
 
 using namespace std;
 
+typedef struct Ball {
+    Ball(vec3 p, vec3 v, float r) {
+        pos = p;
+        vel = v;
+        radius = r;
+    }
+    vec3 pos;
+    vec3 vel;
+    float radius;
+} Ball; 
+
+#define RADIUS .2f
+#define NUM_BALLS 10
+
 int main(int arc, char** argv) {
+    vec3 pos[NUM_BALLS];
+    vec3 vel[NUM_BALLS];
+    for (int i = 0; i < 10; i++) {
+        pos[i] = vec3(0, 5 - i, 0);
+        vel[i] = vec3(0,0,0);
+    }
+
     // initialize SDL and GLEW and set up window
     SDL_Window* window = InitAndWindow("Starter Project", 100, 100, 800, 600);
     cout << "vendor: " << glGetString(GL_VENDOR) << endl;
@@ -21,11 +42,9 @@ int main(int arc, char** argv) {
     shader.LoadFromFile(GL_FRAGMENT_SHADER, "shaders/plain_shader.frag");
     shader.CreateAndLinkProgram();
     shader.Enable();
-    shader.AddAttribute("pos");
+    shader.AddAttribute("verts");
     shader.AddUniform("model");
-    shader.AddUniform("view");
-    shader.AddUniform("proj");
-    /*
+    shader.AddUniform("VP");
     static const GLfloat quad_verts[] = {
         -.5, .5, 0,
         -.5, -.5, 0,
@@ -34,35 +53,28 @@ int main(int arc, char** argv) {
         .5, .5, 0,
         -.5, .5, 0,
     };
-    GLuint vao;
-    GLuint vbo;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    GLuint ball_vao;
+    GLuint quad_vbo;
+    glGenVertexArrays(1, &ball_vao);
+    glBindVertexArray(ball_vao);
+    glGenBuffers(1, &quad_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad_verts), quad_verts, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(shader["pos"]);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glVertexAttribPointer(shader["pos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
-    */
-    Mesh mesh("models/key.obj");
-    GLuint vao;
-    GLuint vbo[3];
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    glGenBuffers(3, vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, mesh.numVertices * sizeof(vec3), mesh.vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(shader["pos"]);
-    glVertexAttribPointer(shader["pos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, mesh.numVertices * sizeof(vec3), mesh.normals, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(shader["norm"]);
-    glVertexAttribPointer(shader["norm"], 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[2]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.numTriangles * sizeof(ivec3),
-            mesh.indices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(shader["verts"]);
+    glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+    GLuint spring_vao;
+    GLuint spring_vbo;
+    glGenVertexArrays(1, &spring_vao);
+    glBindVertexArray(spring_vao);
+    glGenBuffers(1, &spring_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, spring_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * NUM_BALLS, pos, GL_STREAM_DRAW);
+    glEnableVertexAttribArray(shader["verts"]);
+    glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // GLuint texture = LoadTexture("textures/circle.png");
+    // shader.AddUniform("tex");
 
     bool quit = false;
     SDL_Event event;
@@ -121,27 +133,35 @@ int main(int arc, char** argv) {
             }
         }
 
+        // update
         float t = SDL_GetTicks() / 1000.0f;
         fpsC.StartFrame(t);
         float dt = fpsC.GetDT();
         camera.Update(dt);
 
-        // shader.Enable();
-        glClearColor(1, 1, 1, 1);
+        // draw
+        glClearColor(1, 1, 1, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        mat4 model(1);
-        mat4 v = camera.View();
-        mat4 p = camera.Proj();
-        glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
-        glUniformMatrix4fv(shader["view"], 1,  GL_FALSE, value_ptr(v));
-        glUniformMatrix4fv(shader["proj"], 1,  GL_FALSE, value_ptr(p));
+        glUniformMatrix4fv(shader["VP"], 1,  GL_FALSE, value_ptr(camera.VP()));
 
-        // glDrawArrays(GL_TRIANGLES, 0, 6);
-        glDrawElements(GL_TRIANGLES, mesh.numTriangles*3, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(ball_vao);
+        for (int i = 0; i < NUM_BALLS; ++i) {
+            mat4 model(1);
+            model = translate(model, pos[i]);
+            model = scale(model, RADIUS * vec3(1, 1, 1));
+            glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        glBindVertexArray(spring_vao);
+        mat4 model(1);
+        glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+        glBindBuffer(GL_ARRAY_BUFFER, spring_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vec3)*NUM_BALLS, pos, GL_STREAM_DRAW);
+        glDrawArrays(GL_LINE_STRIP, 0, NUM_BALLS);
 
         fpsC.EndFrame();
-
         SDL_GL_SwapWindow(window);
     }
 

@@ -1,27 +1,23 @@
 #include "include/utils.h"
+#include "include/image.h"
 
-/*
 GLuint LoadTexture(string path) {
-    int w, h, comp;
-    unsigned char* image;
-
-    image = stbi_load(path.c_str(), &w, &h, &comp, 4);
-    if (image == nullptr) {
-        cout << "Failed to load image: " << path << endl;
+    Image image;
+    if (!image.LoadImage(path)) {
+        cout << "Failed to load tex: " << path << endl;
         return -1;
     }
+
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
-            GL_UNSIGNED_BYTE, image);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.Width(), image.Height(), 0, GL_RGBA,
+            GL_FLOAT, image.Data());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    stbi_image_free(image);
 
     return tex;
 }
-*/
 
 SDL_Window* InitAndWindow(string title, int ox, int oy, int w, int h) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {

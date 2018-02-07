@@ -1,7 +1,11 @@
 #version 330 core
 
+in vec2 UV;
+
+uniform sampler2D tex;
+
 out vec4 color;
 
 void main() {
-    color = vec4(0, 0, 1, 1);
+    color = vec4(0,0,0,1);
 }

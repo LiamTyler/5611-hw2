@@ -21,9 +21,10 @@ class Image {
         Image(const Image& src);
         ~Image();
 
-        void LoadImage(const std::string& filename);
+        bool LoadImage(const std::string& filename);
         void SaveImage(const std::string& filename);
 
+        vec4* Data() { return pixels_; }
         int Width() { return width_; }
         int Height() { return height_; }
         vec4 GetPixel(int r, int c) { return pixels_[r*width_ + c]; }
