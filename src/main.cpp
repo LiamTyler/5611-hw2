@@ -4,22 +4,13 @@
 #include "include/image.h"
 #include "include/fps_counter.h"
 #include "include/mesh.h"
+#include "include/shape_vertices.h"
 
 using namespace std;
 
-typedef struct Ball {
-    Ball(vec3 p, vec3 v, float r) {
-        pos = p;
-        vel = v;
-        radius = r;
-    }
-    vec3 pos;
-    vec3 vel;
-    float radius;
-} Ball; 
-
 #define RADIUS .2f
 #define NUM_BALLS 10
+#define LINE_WIDTH 8
 
 int main(int arc, char** argv) {
     vec3 pos[NUM_BALLS];
@@ -43,25 +34,28 @@ int main(int arc, char** argv) {
     shader.CreateAndLinkProgram();
     shader.Enable();
     shader.AddAttribute("verts");
+    shader.AddAttribute("normals");
+    shader.AddAttribute("texCoords");
+
     shader.AddUniform("model");
     shader.AddUniform("VP");
-    static const GLfloat quad_verts[] = {
-        -.5, .5, 0,
-        -.5, -.5, 0,
-        .5, -.5, 0,
-        .5, -.5, 0,
-        .5, .5, 0,
-        -.5, .5, 0,
-    };
-    GLuint ball_vao;
-    GLuint quad_vbo;
-    glGenVertexArrays(1, &ball_vao);
-    glBindVertexArray(ball_vao);
-    glGenBuffers(1, &quad_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_verts), quad_verts, GL_STATIC_DRAW);
+    shader.AddUniform("textured");
+
+    GLuint cube_vao;
+    GLuint cube_vbo;
+    glGenVertexArrays(1, &cube_vao);
+    glBindVertexArray(cube_vao);
+    glGenBuffers(1, &cube_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_data), cube_data, GL_STATIC_DRAW);
     glEnableVertexAttribArray(shader["verts"]);
     glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(shader["normals"]);
+    glVertexAttribPointer(shader["normals"], 3, GL_FLOAT, GL_FALSE,
+            0, (void*) CUBE_VERTS_SIZE);
+    glEnableVertexAttribArray(shader["texCoords"]);
+    glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
+            0, (void*) (CUBE_VERTS_SIZE + CUBE_NORMS_SIZE));
 
     GLuint spring_vao;
     GLuint spring_vbo;
@@ -73,8 +67,27 @@ int main(int arc, char** argv) {
     glEnableVertexAttribArray(shader["verts"]);
     glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    // GLuint texture = LoadTexture("textures/circle.png");
-    // shader.AddUniform("tex");
+    GLuint quad_vao;
+    GLuint quad_vbo;
+    glGenVertexArrays(1, &quad_vao);
+    glBindVertexArray(quad_vao);
+    glGenBuffers(1, &quad_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(XZ_quad_data), XZ_quad_data, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(shader["verts"]);
+    glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(shader["normals"]);
+    glVertexAttribPointer(shader["normals"], 3, GL_FLOAT, GL_FALSE,
+            0, (void*) QUAD_VERTS_SIZE);
+    glEnableVertexAttribArray(shader["texCoords"]);
+    glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
+            0, (void*) (QUAD_VERTS_SIZE + QUAD_NORMS_SIZE));
+
+    GLuint texture = LoadTexture("textures/wood_floor.jpg");
+    shader.AddUniform("tex");
+
+    glLineWidth(LINE_WIDTH);
+    // glEnable(GL_LINE_SMOOTH);
 
     bool quit = false;
     SDL_Event event;
@@ -139,23 +152,41 @@ int main(int arc, char** argv) {
         float dt = fpsC.GetDT();
         camera.Update(dt);
 
+        // update springs
+        for (int i = 0; i < NUM_BALLS; ++i) {
+            pos[i].x += dt;
+        }
+        
+
         // draw
         glClearColor(1, 1, 1, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         glUniformMatrix4fv(shader["VP"], 1,  GL_FALSE, value_ptr(camera.VP()));
 
-        glBindVertexArray(ball_vao);
+        mat4 model(1);
+        glBindVertexArray(quad_vao);
+        model = translate(model, vec3(0, -5, 0));
+        model = scale(model, vec3(25, 1, 25));
+        glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(shader["tex"], 0);
+        glUniform1i(shader["textured"], true);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glUniform1i(shader["textured"], false);
+        glBindVertexArray(cube_vao);
         for (int i = 0; i < NUM_BALLS; ++i) {
-            mat4 model(1);
+            model = mat4(1);
             model = translate(model, pos[i]);
             model = scale(model, RADIUS * vec3(1, 1, 1));
             glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
-            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
+        glUniform1i(shader["textured"], false);
         glBindVertexArray(spring_vao);
-        mat4 model(1);
+        model = mat4(1);
         glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
         glBindBuffer(GL_ARRAY_BUFFER, spring_vbo);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vec3)*NUM_BALLS, pos, GL_STREAM_DRAW);

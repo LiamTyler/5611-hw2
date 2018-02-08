@@ -1,14 +1,20 @@
 #version 330 core
 
 in vec3 verts;
+in vec3 normals;
+in vec2 texCoords;
 
 uniform mat4 model;
 uniform mat4 VP;
 
+out vec3 pos;
+out vec3 normal;
 out vec2 UV;
 
 void main() {
-    gl_Position = VP * model * vec4(verts, 1);
+    pos = (model * vec4(verts, 1)).xyz;
+    normal = (transpose(inverse(model)) * vec4(normals, 0)).xyz;
+    UV = texCoords;
 
-    UV = verts.xy + vec2(.5, .5);
+    gl_Position = VP * model * vec4(verts, 1);
 }
