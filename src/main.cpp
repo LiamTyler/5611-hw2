@@ -143,8 +143,10 @@ int main(int arc, char** argv) {
                         vel[NUM_BALLS - 1].x += 5;
                         break;
                     case SDLK_UP:
+                        vel[NUM_BALLS - 1].z -= 5;
                         break;
                     case SDLK_DOWN:
+                        vel[NUM_BALLS - 1].z += 5;
                         break;
                 }
             } else if (event.type == SDL_KEYUP) {
@@ -187,8 +189,6 @@ int main(int arc, char** argv) {
                 double stringF = -KS*(stringLen - REST_LENGTH);
                 highp_dvec3 dampF = -KD*(vel[i] - vel[i-1]);
                 highp_dvec3 acc = highp_dvec3(0, 0, 0);
-                // acc.x = stringF*dirX + dampFX;
-                // acc.y = stringF*dirY + dampFY + GRAVITY.y * MASS;
                 acc += stringF * dir + dampF +  GRAVITY * MASS;
                 acc *= 1.0/MASS;
 

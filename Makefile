@@ -6,7 +6,7 @@ OBJDIR = $(BUILDDIR)/obj
 EXTDIR = $(MAINDIR)/ext
 CXX = g++
 CXXLIBS += -lGLEW -lSDL2 -lGL -lGLU -ldl
-CXXFLAGS += -I$(SRCDIR) -I$(EXTDIR) -std=c++11
+CXXFLAGS += -I$(SRCDIR) -I$(EXTDIR) -std=c++11 -O3
 
 rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 make-depend-cxx=$(CXX) $(CXXFLAGS) -MM -MF $3 -MP -MT $2 $1
