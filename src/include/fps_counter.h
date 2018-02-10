@@ -9,6 +9,7 @@ class FPSCounter {
         ~FPSCounter();
         void Init();
         void StartFrame(float dt);
+        void EndFrame();
         void EndFrame(void* data);
         float GetDT() { return time_ - prevTime_; }
         void CallBack(std::function<void(void*)> func) { callback_ = func; }

@@ -20,6 +20,10 @@ void FPSCounter::StartFrame(float time) {
     time_ = time;
 }
 
+void FPSCounter::EndFrame() {
+    EndFrame(nullptr);
+}
+
 void FPSCounter::EndFrame(void* data) {
     prevTime_ = time_;
     ++frameCounter_;
@@ -27,7 +31,7 @@ void FPSCounter::EndFrame(void* data) {
         std::cout << "FPS: " << frameCounter_ << std::endl;
         frameCounter_ = 0;
         fpsTime_ = time_;
-        if (callback_)
+        if (callback_ && data)
             callback_(data);
     }
 }
