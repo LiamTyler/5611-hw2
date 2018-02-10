@@ -9,29 +9,31 @@
 using namespace std;
 
 #define RADIUS .2f
-#define NUM_BALLS 10
+#define dimX 4
+#define dimY 10
+#define initDX 1
+#define initDY 0.2
 #define LINE_WIDTH 2
 #define REST_LENGTH 0.05
 #define KS 50.0
-#define KD 25.0
+#define KD 10.0
 #define MASS 4.0
 #define GRAVITY highp_dvec3(0, -9.81, 0)
 #define DT 0.001
 
 void print_lengths(void* data) {
     vec3* pos = (vec3*) data;
-    cout << "Lengths: " << endl;
-    for (int i = 1; i < NUM_BALLS; i++) {
-        cout << i << ": " << length(pos[i] - pos[i-1]) << endl;
-    }
+    // cout << "Lengths: " << endl;
 }
 
 int main(int arc, char** argv) {
-    highp_dvec3 pos[NUM_BALLS];
-    highp_dvec3 vel[NUM_BALLS];
-    for (int i = 0; i < NUM_BALLS; i++) {
-        pos[i] = highp_dvec3(0, 5 - i*1.0*REST_LENGTH, 0);
-        vel[i] = highp_dvec3(0,0,0);
+    highp_dvec3 pos[dimY][dimX];
+    highp_dvec3 vel[dimY][dimX];
+    for (int r = 0; r < dimY; r++) {
+        for (int c = 0; c < dimX; c++) {
+            pos[r][c] = highp_dvec3(c*initDX, 5 - r*initDY, 0);
+            vel[r][c] = highp_dvec3(0,0,0);
+        }
     }
 
     // initialize SDL and GLEW and set up window
@@ -77,7 +79,7 @@ int main(int arc, char** argv) {
     glBindVertexArray(spring_vao);
     glGenBuffers(1, &spring_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, spring_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * NUM_BALLS, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * 2 * dimX * (dimY - 1), NULL, GL_STREAM_DRAW);
     glEnableVertexAttribArray(shader["verts"]);
     glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -137,16 +139,28 @@ int main(int arc, char** argv) {
                     case SDLK_SPACE:
                         break;
                     case SDLK_LEFT:
-                        vel[NUM_BALLS - 1].x -= 5;
+                        for (int c = 0; c < dimX; c++)
+                            vel[dimY - 1][c].x -= 5;
                         break;
                     case SDLK_RIGHT:
-                        vel[NUM_BALLS - 1].x += 5;
+                        for (int c = 0; c < dimX; c++)
+                            vel[dimY - 1][c].x += 5;
                         break;
                     case SDLK_UP:
-                        vel[NUM_BALLS - 1].z -= 5;
+                        for (int c = 0; c < dimX; c++)
+                            vel[dimY - 1][c].z -= 5;
                         break;
                     case SDLK_DOWN:
-                        vel[NUM_BALLS - 1].z += 5;
+                        for (int c = 0; c < dimX; c++)
+                            vel[dimY - 1][c].z += 5;
+                        break;
+                    case SDLK_r:
+                        for (int r = 0; r < dimY; r++) {
+                            for (int c = 0; c < dimX; c++) {
+                                pos[r][c] = highp_dvec3(c*initDX, 5 - r*initDY, 0);
+                                vel[r][c] = highp_dvec3(0,0,0);
+                            }
+                        }
                         break;
                 }
             } else if (event.type == SDL_KEYUP) {
@@ -180,32 +194,37 @@ int main(int arc, char** argv) {
         camera.Update(dt);
 
         for (int sims = 0; sims < 4; sims++) {
-            highp_dvec3 accels[NUM_BALLS] = { highp_dvec3(0, 0, 0) };
+            highp_dvec3 accels[dimY][dimX] = { highp_dvec3(0, 0, 0) };
 
-            for (int i = 1; i < NUM_BALLS; ++i) {
-                highp_dvec3 dpos = pos[i] - pos[i-1];
-                double stringLen = length(dpos);
-                highp_dvec3 dir = normalize(dpos);
-                double stringF = -KS*(stringLen - REST_LENGTH);
-                highp_dvec3 dampF = -KD*(vel[i] - vel[i-1]);
-                highp_dvec3 acc = highp_dvec3(0, 0, 0);
-                acc += stringF * dir + dampF +  GRAVITY * MASS;
-                acc *= 1.0/MASS;
+            for (int r = 1; r < dimY; ++r) {
+                for (int c = 0; c < dimX; ++c) {
+                    highp_dvec3 dpos = pos[r][c] - pos[r-1][c];
+                    double stringLen = length(dpos);
+                    highp_dvec3 dir = normalize(dpos);
+                    double stringF = -KS*(stringLen - REST_LENGTH);
+                    highp_dvec3 dampF = -KD*(vel[r][c] - vel[r-1][c]);
+                    highp_dvec3 acc = highp_dvec3(0, 0, 0);
+                    acc += stringF * dir + dampF +  GRAVITY * MASS;
+                    acc *= 1.0/MASS;
 
-                accels[i] += acc;
-                accels[i-1] -= acc;
+                    accels[r][c] += acc;
+                    accels[r-1][c] -= acc;
+                }
             }
 
-            for (int i = 1; i < NUM_BALLS; ++i) {
-                vel[i] += accels[i] * DT;
-                pos[i] += vel[i] * DT;
+            for (int r = 1; r < dimY; ++r) {
+                for (int c = 0; c < dimX; ++c) {
+                    vel[r][c] += accels[r][c] * DT;
+                    pos[r][c] += vel[r][c] * DT;
+                }
             }
-
         }
-        vec3 pArray[NUM_BALLS];
-        for (int i = 0; i < NUM_BALLS; ++i) {
-            highp_dvec3 p = pos[i];
-            pArray[i] = p;
+        vec3 pArray[dimY][dimX];
+        for (int r = 0; r < dimY; ++r) {
+            for (int c = 0; c < dimX; ++c) {
+                highp_dvec3 p = pos[r][c];
+                pArray[r][c] = p;
+            }
         }
 
         // draw
@@ -226,21 +245,34 @@ int main(int arc, char** argv) {
 
         glUniform1i(shader["textured"], false);
         glBindVertexArray(cube_vao);
-        for (int i = 0; i < NUM_BALLS; ++i) {
-            model = mat4(1);
-            model = translate(model, pArray[i]);
-            model = scale(model, RADIUS * vec3(1, 1, 1));
-            glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+        for (int r = 0; r < dimY; ++r) {
+            for (int c = 0; c < dimX; ++c) {
+                model = mat4(1);
+                model = translate(model, pArray[r][c]);
+                model = scale(model, RADIUS * vec3(1, 1, 1));
+                glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+            }
         }
 
+        int numLines = 2 * dimX * (dimY - 1);
+        vec3 lineArray[numLines];
+        int line = 0;
+        for (int r = 0; r < dimY - 1; ++r) {
+            for (int c = 0; c < dimX; ++c) {
+                vec3 p1 = pArray[r][c];
+                vec3 p2 = pArray[r+1][c];
+                lineArray[line++] = p1;
+                lineArray[line++] = p2;
+            }
+        }
         glUniform1i(shader["textured"], false);
         glBindVertexArray(spring_vao);
         model = mat4(1);
         glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
         glBindBuffer(GL_ARRAY_BUFFER, spring_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vec3)*NUM_BALLS, pArray, GL_STREAM_DRAW);
-        glDrawArrays(GL_LINE_STRIP, 0, NUM_BALLS);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numLines, lineArray, GL_STREAM_DRAW);
+        glDrawArrays(GL_LINES, 0, numLines);
 
         fpsC.EndFrame(&pArray[0]);
         SDL_GL_SwapWindow(window);
