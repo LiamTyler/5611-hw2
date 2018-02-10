@@ -31,6 +31,9 @@ class SpringSystem {
         void Render(GLSLShader& shader);
         Node& GetNode(int r, int c) { return nodes_[r*dimX_ + c]; }
 
+        int DimX() { return dimX_; }
+        int DimY() { return dimY_; }
+
     private:
         int dimX_;
         int dimY_;

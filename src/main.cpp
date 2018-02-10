@@ -53,7 +53,7 @@ int main(int arc, char** argv) {
     glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
             0, (void*) (QUAD_VERTS_SIZE + QUAD_NORMS_SIZE));
 
-    SpringSystem springSystem = SpringSystem(10, 10, 50, 10);
+    SpringSystem springSystem = SpringSystem(10, 10, 250, 20);
     springSystem.Setup(shader);
 
     glLineWidth(2);
@@ -145,6 +145,7 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
             case SDLK_DOWN:
                 break;
             case SDLK_r:
+				ss.SpringSetup();
                 break;
         }
     } else if (event.type == SDL_KEYUP) {

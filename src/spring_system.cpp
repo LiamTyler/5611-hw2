@@ -14,11 +14,11 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
 
     KS_ = ks;
     KD_ = kd;
-    mass_ = 4.0;
-    restLength_ = 0.05;
+    mass_ = 1.0;
+    restLength_ = 0.5;
 
-    initDX_ = 1.0;
-    initDY_ = 0.2;
+    initDX_ = 0.60;
+    initDY_ = 1.00;
 }
 
 void SpringSystem::SpringSetup() {
@@ -26,7 +26,8 @@ void SpringSystem::SpringSetup() {
         for (int c = 0; c < dimX_; c++) {
             Node& n = GetNode(r, c);
             n.pos = highp_dvec3(c * initDX_, 5 - r*initDY_, 0);
-            n.vel = highp_dvec3(0, 0, 0);
+            if (r != 0)
+                n.vel = highp_dvec3(2, 0, 0);
         }
     }
 }
@@ -50,7 +51,8 @@ void SpringSystem::GLSetup(GLSLShader& shader) {
     glBindVertexArray(springs_vao_);
     glGenBuffers(1, &springs_vbo_);
     glBindBuffer(GL_ARRAY_BUFFER, springs_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * 2 * dimX_ * (dimY_ - 1), NULL, GL_STREAM_DRAW);
+    int numLines = 2 * (dimX_ * (dimY_ - 1) + dimY_ * (dimX_ - 1));
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numLines, NULL, GL_STREAM_DRAW);
     glEnableVertexAttribArray(shader["verts"]);
     glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 }
@@ -61,7 +63,12 @@ void SpringSystem::Setup(GLSLShader& shader) {
 }
 
 void SpringSystem::Update(double dt) {
-    highp_dvec3 accels[dimY_][dimX_] = { highp_dvec3(0, 0, 0) };
+    highp_dvec3 accels[dimY_][dimX_];
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_; ++c) {
+            accels[r][c] = GRAVITY * mass_;
+        }
+    }
     for (int r = 1; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);
@@ -72,15 +79,34 @@ void SpringSystem::Update(double dt) {
             double stringF = -KS_*(stringLen - restLength_);
             highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
             highp_dvec3 acc = highp_dvec3(0, 0, 0);
-            acc += stringF * dir + dampF +  GRAVITY * mass_;
+            acc += stringF * dir + dampF; // + GRAVITY * mass_;
             acc *= 1.0/mass_;
 
             accels[r][c] += acc;
             accels[r-1][c] -= acc;
         }
     }
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 1; c < dimX_; ++c) {
+            Node& n1 = GetNode(r, c);
+            Node& n2 = GetNode(r, c - 1);
+            highp_dvec3 dpos = n1.pos - n2.pos;
+            double stringLen = length(dpos);
+            highp_dvec3 dir = normalize(dpos);
+            double stringF = -KS_*(stringLen - restLength_);
+            highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
+            highp_dvec3 acc = highp_dvec3(0, 0, 0);
+            acc += stringF * dir + dampF; // +  GRAVITY * mass_;
+            acc *= 1.0/mass_;
 
-    for (int r = 1; r < dimY_; ++r) {
+            accels[r][c] += acc;
+            accels[r][c-1] -= acc;
+        }
+    }
+
+    accels[0][0] = vec3(0, 0, 0);
+    accels[0][dimX_ - 1] = vec3(0, 0, 0);
+    for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
             n.vel += accels[r][c] * dt;
@@ -110,13 +136,21 @@ void SpringSystem::Render(GLSLShader& shader) {
         }
     }
 
-    int numLines = 2 * dimX_ * (dimY_ - 1);
+    int numLines = 2 * (dimX_ * (dimY_ - 1) + dimY_ * (dimX_ - 1));
     vec3 lineArray[numLines];
     int line = 0;
     for (int r = 0; r < dimY_ - 1; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             vec3 p1 = pArray[r][c];
             vec3 p2 = pArray[r+1][c];
+            lineArray[line++] = p1;
+            lineArray[line++] = p2;
+        }
+    }
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_ - 1; ++c) {
+            vec3 p1 = pArray[r][c];
+            vec3 p2 = pArray[r][c + 1];
             lineArray[line++] = p1;
             lineArray[line++] = p2;
         }
