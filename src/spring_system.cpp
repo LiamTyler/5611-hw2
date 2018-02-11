@@ -14,6 +14,9 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
     numTris_ = 2 * (dimX_ - 1) * dimY_;
     nodes_ = new Node[numNodes_];
 
+    textured_ = false;
+    paused_ = false;
+
     KS_ = ks;
     KD_ = kd;
     mass_ = .40;
@@ -34,13 +37,15 @@ void SpringSystem::SpringSetup() {
     }
 }
 
-void SpringSystem::GetPositions() {
+void SpringSystem::UpdateGPUPositions() {
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
             posArray_[r*dimX_ + c] = n.pos;
         }
     }
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, &posArray_[0], GL_STREAM_DRAW);
 }
 
 /*
@@ -78,21 +83,12 @@ void SpringSystem::RecalculateNormals() {
 */
 
 void SpringSystem::GLSetup() {
-    shader_.LoadFromFile(GL_VERTEX_SHADER, "shaders/cloth_shader.vert");
-    shader_.LoadFromFile(GL_FRAGMENT_SHADER, "shaders/cloth_shader.frag");
-    shader_.CreateAndLinkProgram();
-    shader_.Enable();
-    shader_.AddAttribute("inPos");
-    shader_.AddAttribute("texCoords");
-    shader_.AddUniform("VP");
-
-    // allocate buffers
+    // allocate and fill buffers
     posArray_ = new vec3[numNodes_];
     // normals_ = new vec3[numNodes_];
     texCoords_ = new vec2[numNodes_];
     indices_ = new unsigned int[3 * numTris_];
 
-    // fill tex Coords buffer
     int i = 0;
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
@@ -101,7 +97,7 @@ void SpringSystem::GLSetup() {
             texCoords_[i++] = vec2(x, y);
         }
     }
-    // fill index buffer
+
     i = 0;
     for (unsigned int r = 0; r < dimY_ - 1; ++r) {
         for (unsigned int c = 0; c < dimX_ - 1; ++c) {
@@ -118,6 +114,18 @@ void SpringSystem::GLSetup() {
         }
     }
 
+    // setup textured cloth opengl stuff
+    cloth_shader_.LoadFromFile(GL_VERTEX_SHADER, "shaders/cloth_shader.vert");
+    cloth_shader_.LoadFromFile(GL_FRAGMENT_SHADER, "shaders/cloth_shader.frag");
+    cloth_shader_.CreateAndLinkProgram();
+    cloth_shader_.Enable();
+    cloth_shader_.AddAttribute("inPos");
+    cloth_shader_.AddAttribute("texCoords");
+    cloth_shader_.AddUniform("VP");
+    cloth_shader_.AddUniform("tex");
+
+    cloth_texture_ = LoadTexture("textures/blue_cloth.jpg");
+
     glGenVertexArrays(1, &cloth_vao_);
     glBindVertexArray(cloth_vao_);
     glGenBuffers(CLOTH_TOTAL_VBOS, cloth_vbos_);
@@ -125,22 +133,67 @@ void SpringSystem::GLSetup() {
     // vertices
     glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, NULL, GL_STREAM_DRAW);
-    glEnableVertexAttribArray(shader_["inPos"]);
-    glVertexAttribPointer(shader_["inPos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(cloth_shader_["inPos"]);
+    glVertexAttribPointer(cloth_shader_["inPos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     // tex coords
     glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_TEX_COORDS]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * numNodes_, &texCoords_[0], GL_STATIC_DRAW);
-    glEnableVertexAttribArray(shader_["texCoords"]);
-    glVertexAttribPointer(shader_["texCoords"], 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(cloth_shader_["texCoords"]);
+    glVertexAttribPointer(cloth_shader_["texCoords"], 2, GL_FLOAT, GL_FALSE, 0, 0);
 
     // indices
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cloth_vbos_[CLOTH_INDICES]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * numTris_ * 3,
                  &indices_[0], GL_STATIC_DRAW);
 
-    cloth_texture_ = LoadTexture("textures/blue_cloth.jpg");
-    shader_.AddUniform("tex");
+    // node - spring shader
+    spring_shader_.LoadFromFile(GL_VERTEX_SHADER, "shaders/spring_shader.vert");
+    spring_shader_.LoadFromFile(GL_FRAGMENT_SHADER, "shaders/spring_shader.frag");
+    spring_shader_.CreateAndLinkProgram();
+    spring_shader_.Enable();
+    spring_shader_.AddAttribute("verts");
+    spring_shader_.AddUniform("model");
+    spring_shader_.AddUniform("VP");
+    spring_shader_.AddUniform("color");
+
+    glGenVertexArrays(1, &cube_vao_);
+    glBindVertexArray(cube_vao_);
+    glGenBuffers(1, &cube_vbo_);
+
+    // vertices
+    glBindBuffer(GL_ARRAY_BUFFER, cube_vbo_);
+    glBufferData(GL_ARRAY_BUFFER, CUBE_VERTS_SIZE, cube_data, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(spring_shader_["verts"]);
+    glVertexAttribPointer(spring_shader_["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glGenVertexArrays(1, &spring_vao_);
+    glBindVertexArray(spring_vao_);
+
+    // vertices
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
+    glEnableVertexAttribArray(spring_shader_["verts"]);
+    glVertexAttribPointer(spring_shader_["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+
+    // indices
+    // horizontal lines
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_ - 1; ++c) {
+            spring_indices_.push_back(r*dimX_ + c);
+            spring_indices_.push_back(r*dimX_ + c + 1);
+        }
+    }
+    for (int r = 0; r < dimY_ - 1; ++r) {
+        for (int c = 0; c < dimX_; ++c) {
+            spring_indices_.push_back(r*dimX_ + c);
+            spring_indices_.push_back((r+1)*dimX_ + c);
+        }
+    }
+    glGenBuffers(1, &spring_vbo_);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, spring_vbo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * spring_indices_.size(),
+                 &spring_indices_[0], GL_STATIC_DRAW);
 }
 
 void SpringSystem::Setup() {
@@ -149,6 +202,9 @@ void SpringSystem::Setup() {
 }
 
 void SpringSystem::Update(double dt) {
+    if (paused_)
+        return;
+
     highp_dvec3 accels[dimY_][dimX_];
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
@@ -202,65 +258,43 @@ void SpringSystem::Update(double dt) {
 }
 
 void SpringSystem::Render(const mat4& VP) {
-    shader_.Enable();
-    glBindVertexArray(cloth_vao_);
+    UpdateGPUPositions();
+    if (textured_) {
+        cloth_shader_.Enable();
 
-    GetPositions();
-    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, &posArray_[0], GL_STREAM_DRAW);
+        glBindVertexArray(cloth_vao_);
 
-    glUniformMatrix4fv(shader_["VP"], 1, GL_FALSE, value_ptr(VP));
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cloth_texture_);
-    glUniform1i(shader_["tex"], 0);
-    glDrawElements(GL_TRIANGLES, 3 * numTris_, GL_UNSIGNED_INT, 0);
-
-    /*
-    vec3 pArray[dimY_][dimX_];
-    for (int r = 0; r < dimY_; ++r) {
-        for (int c = 0; c < dimX_; ++c) {
-            Node& n = GetNode(r, c);
-            pArray[r][c] = n.pos;
+        glUniformMatrix4fv(cloth_shader_["VP"], 1, GL_FALSE, value_ptr(VP));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, cloth_texture_);
+        glUniform1i(cloth_shader_["tex"], 0);
+        glDrawElements(GL_TRIANGLES, 3 * numTris_, GL_UNSIGNED_INT, 0);
+    } else {
+        spring_shader_.Enable();
+        glUniformMatrix4fv(cloth_shader_["VP"], 1, GL_FALSE, value_ptr(VP));
+        glBindVertexArray(cube_vao_);
+        vec4 color = vec4(0, 0, 1, 1);
+        glUniform4fv(spring_shader_["color"], 1, value_ptr(color));
+        for (int r = 0; r < dimY_; ++r) {
+            for (int c = 0; c < dimX_; ++c) {
+                vec3 pos = GetNode(r, c).pos;
+                mat4 model(1);
+                model = translate(model, pos);
+                model = scale(model, .2f * vec3(1, 1, 1));
+                glUniformMatrix4fv(spring_shader_["model"], 1, GL_FALSE, value_ptr(model));
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+            }
         }
-    }
-    glUniform1i(shader["textured"], false);
-    glBindVertexArray(cube_vao_);
-    for (int r = 0; r < dimY_; ++r) {
-        for (int c = 0; c < dimX_; ++c) {
-            model = mat4(1);
-            model = translate(model, pArray[r][c]);
-            model = scale(model, RADIUS * vec3(1, 1, 1));
-            glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-    }
 
-    int numLines = 2 * (dimX_ * (dimY_ - 1) + dimY_ * (dimX_ - 1));
-    vec3 lineArray[numLines];
-    int line = 0;
-    for (int r = 0; r < dimY_ - 1; ++r) {
-        for (int c = 0; c < dimX_; ++c) {
-            vec3 p1 = pArray[r][c];
-            vec3 p2 = pArray[r+1][c];
-            lineArray[line++] = p1;
-            lineArray[line++] = p2;
-        }
-    }
-    for (int r = 0; r < dimY_; ++r) {
-        for (int c = 0; c < dimX_ - 1; ++c) {
-            vec3 p1 = pArray[r][c];
-            vec3 p2 = pArray[r][c + 1];
-            lineArray[line++] = p1;
-            lineArray[line++] = p2;
-        }
-    }
+        int numLines = 2 * (dimX_ * (dimY_ - 1) + dimY_ * (dimX_ - 1));
 
-    glUniform1i(shader["textured"], false);
-    glBindVertexArray(springs_vao_);
-    model = mat4(1);
-    glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
-    glBindBuffer(GL_ARRAY_BUFFER, springs_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numLines, lineArray, GL_STREAM_DRAW);
-    glDrawArrays(GL_LINES, 0, numLines);
-    */
+        color = vec4(0, 0, 0, 1);
+        glUniform4fv(spring_shader_["color"], 1, value_ptr(color));
+        glBindVertexArray(spring_vao_);
+        mat4 model = mat4(1);
+        glUniformMatrix4fv(spring_shader_["model"], 1, GL_FALSE, value_ptr(model));
+        // glDrawArrays(GL_LINES, 0, numLines);
+        glLineWidth(2);
+        glDrawElements(GL_LINES, spring_indices_.size(), GL_UNSIGNED_INT, 0);
+    }
 }

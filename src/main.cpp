@@ -132,6 +132,7 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
                 quit = true;
                 break;
             case SDLK_p:
+				ss.Pause();
                 break;
             case SDLK_SPACE:
                 break;
@@ -145,6 +146,9 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
                 break;
             case SDLK_r:
 				ss.SpringSetup();
+                break;
+            case SDLK_c:
+				ss.ChangeVizualization();
                 break;
         }
     } else if (event.type == SDL_KEYUP) {

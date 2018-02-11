@@ -37,7 +37,9 @@ class SpringSystem {
         void Render(const mat4& VP);
         Node& GetNode(int r, int c) { return nodes_[r*dimX_ + c]; }
 
-        void GetPositions();
+        void ChangeVizualization() { textured_ = !textured_; }
+        void Pause() { paused_ = !paused_; }
+        void UpdateGPUPositions();
         // void RecalculateNormals();
         int DimX() { return dimX_; }
         int DimY() { return dimY_; }
@@ -54,22 +56,27 @@ class SpringSystem {
         double mass_;
         double restLength_;
 
+        bool textured_;
+        bool paused_;
+
         int numNodes_;
         int numTris_;
-        bool textured_;
         vec3* posArray_;
-        //vec3* normals_;
+        // vec3* normals_;
         vec2* texCoords_;
         unsigned int* indices_;
+        vector<unsigned int> spring_indices_;
 
         // opengl shit
-        GLSLShader shader_;
+        GLSLShader cloth_shader_;
+        GLSLShader spring_shader_;
         GLint cloth_texture_;
         GLuint cloth_vao_;
         GLuint cloth_vbos_[CLOTH_TOTAL_VBOS];
-        GLuint cloth_vert_vbo_;
-        GLuint cloth_tex_vbo_;
-        GLuint cloth_element_buffer_;
+        GLuint cube_vao_;
+        GLuint cube_vbo_;
+        GLuint spring_vao_;
+        GLuint spring_vbo_;
 };
 
 #endif  // SRC_INCLUDE_SPRING_SYSTEM_H_
