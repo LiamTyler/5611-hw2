@@ -10,11 +10,13 @@ SpringSystem::SpringSystem() :
 SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
     dimX_ = dimx;
     dimY_ = dimy;
-    nodes_ = new Node[dimX_ * dimY_];
+    numNodes_ = dimX_ * dimY_;
+    numTris_ = 2 * (dimX_ - 1) * dimY_;
+    nodes_ = new Node[numNodes_];
 
     KS_ = ks;
     KD_ = kd;
-    mass_ = 1.0;
+    mass_ = .40;
     restLength_ = 0.5;
 
     initDX_ = 0.60;
@@ -27,39 +29,123 @@ void SpringSystem::SpringSetup() {
             Node& n = GetNode(r, c);
             n.pos = highp_dvec3(c * initDX_, 5 - r*initDY_, 0);
             if (r != 0)
-                n.vel = highp_dvec3(2, 0, 0);
+                n.vel = highp_dvec3(0, 0, 0);
         }
     }
 }
 
-void SpringSystem::GLSetup(GLSLShader& shader) {
-    glGenVertexArrays(1, &cube_vao_);
-    glBindVertexArray(cube_vao_);
-    glGenBuffers(1, &cube_vbo_);
-    glBindBuffer(GL_ARRAY_BUFFER, cube_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_data), cube_data, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(shader["verts"]);
-    glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(shader["normals"]);
-    glVertexAttribPointer(shader["normals"], 3, GL_FLOAT, GL_FALSE,
-            0, (void*) CUBE_VERTS_SIZE);
-    glEnableVertexAttribArray(shader["texCoords"]);
-    glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
-            0, (void*) (CUBE_VERTS_SIZE + CUBE_NORMS_SIZE));
-
-    glGenVertexArrays(1, &springs_vao_);
-    glBindVertexArray(springs_vao_);
-    glGenBuffers(1, &springs_vbo_);
-    glBindBuffer(GL_ARRAY_BUFFER, springs_vbo_);
-    int numLines = 2 * (dimX_ * (dimY_ - 1) + dimY_ * (dimX_ - 1));
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numLines, NULL, GL_STREAM_DRAW);
-    glEnableVertexAttribArray(shader["verts"]);
-    glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+void SpringSystem::GetPositions() {
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_; ++c) {
+            Node& n = GetNode(r, c);
+            posArray_[r*dimX_ + c] = n.pos;
+        }
+    }
 }
 
-void SpringSystem::Setup(GLSLShader& shader) {
+/*
+void SpringSystem::RecalculateNormals() {
+    // reset normals
+    for (int r = 0; r < dimY_; r++)
+        for (int c = 0; c < dimX_; c++)
+            normals_[r*dimX_ + c] = vec3(0, 0, 0);
+
+    int i = 0;
+    for (unsigned int r = 0; r < dimY_ - 1; ++r) {
+        for (unsigned int c = 0; c < dimX_ - 1; ++c) {
+            vec3 ul = posArray_[indices_[i + 0]];
+            vec3 ll = posArray_[indices_[i + 1]];
+            vec3 ur = posArray_[indices_[i + 2]];
+            vec3 lr = posArray_[indices_[i + 5]];
+            vec3 e12 = ll - ul;
+            vec3 e13 = ur - ul;
+            vec3 e34 = lr - ur;
+            vec3 norm1 = cross(e12, e13);
+            vec3 norm2 = cross(-e13, e34);
+            normals_[(r + 0) * dimX_ + (c + 0)] += norm1;
+            normals_[(r + 1) * dimX_ + (c + 0)] += norm1;
+            normals_[(r + 0) * dimX_ + (c + 1)] += norm1;
+            normals_[(r + 0) * dimX_ + (c + 1)] += norm2;
+            normals_[(r + 1) * dimX_ + (c + 0)] += norm2;
+            normals_[(r + 1) * dimX_ + (c + 1)] += norm2;
+            i += 6;
+        }
+    }
+    for (int r = 0; r < dimY_; r++)
+        for (int c = 0; c < dimX_; c++)
+            normals_[r*dimX_ + c] = normalize(normals_[r*dimX_ + c]);
+}
+*/
+
+void SpringSystem::GLSetup() {
+    shader_.LoadFromFile(GL_VERTEX_SHADER, "shaders/cloth_shader.vert");
+    shader_.LoadFromFile(GL_FRAGMENT_SHADER, "shaders/cloth_shader.frag");
+    shader_.CreateAndLinkProgram();
+    shader_.Enable();
+    shader_.AddAttribute("inPos");
+    shader_.AddAttribute("texCoords");
+    shader_.AddUniform("VP");
+
+    // allocate buffers
+    posArray_ = new vec3[numNodes_];
+    // normals_ = new vec3[numNodes_];
+    texCoords_ = new vec2[numNodes_];
+    indices_ = new unsigned int[3 * numTris_];
+
+    // fill tex Coords buffer
+    int i = 0;
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_; ++c) {
+            float x = c / (float) dimX_;
+            float y = 1.0f - r / (float) dimY_;
+            texCoords_[i++] = vec2(x, y);
+        }
+    }
+    // fill index buffer
+    i = 0;
+    for (unsigned int r = 0; r < dimY_ - 1; ++r) {
+        for (unsigned int c = 0; c < dimX_ - 1; ++c) {
+            unsigned int ul = (r + 0) * dimX_ + (c + 0);
+            unsigned int ll = (r + 1) * dimX_ + (c + 0);
+            unsigned int ur = (r + 0) * dimX_ + (c + 1);
+            unsigned int lr = (r + 1) * dimX_ + (c + 1);
+            indices_[i++] = ul;
+            indices_[i++] = ll;
+            indices_[i++] = ur;
+            indices_[i++] = ur;
+            indices_[i++] = ll;
+            indices_[i++] = lr;
+        }
+    }
+
+    glGenVertexArrays(1, &cloth_vao_);
+    glBindVertexArray(cloth_vao_);
+    glGenBuffers(CLOTH_TOTAL_VBOS, cloth_vbos_);
+
+    // vertices
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, NULL, GL_STREAM_DRAW);
+    glEnableVertexAttribArray(shader_["inPos"]);
+    glVertexAttribPointer(shader_["inPos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // tex coords
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_TEX_COORDS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * numNodes_, &texCoords_[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(shader_["texCoords"]);
+    glVertexAttribPointer(shader_["texCoords"], 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // indices
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cloth_vbos_[CLOTH_INDICES]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * numTris_ * 3,
+                 &indices_[0], GL_STATIC_DRAW);
+
+    cloth_texture_ = LoadTexture("textures/blue_cloth.jpg");
+    shader_.AddUniform("tex");
+}
+
+void SpringSystem::Setup() {
     SpringSetup();
-    GLSetup(shader);
+    GLSetup();
 }
 
 void SpringSystem::Update(double dt) {
@@ -115,9 +201,22 @@ void SpringSystem::Update(double dt) {
     }
 }
 
-void SpringSystem::Render(GLSLShader& shader) {
+void SpringSystem::Render(const mat4& VP) {
+    shader_.Enable();
+    glBindVertexArray(cloth_vao_);
+
+    GetPositions();
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, &posArray_[0], GL_STREAM_DRAW);
+
+    glUniformMatrix4fv(shader_["VP"], 1, GL_FALSE, value_ptr(VP));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cloth_texture_);
+    glUniform1i(shader_["tex"], 0);
+    glDrawElements(GL_TRIANGLES, 3 * numTris_, GL_UNSIGNED_INT, 0);
+
+    /*
     vec3 pArray[dimY_][dimX_];
-    mat4 model;
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
@@ -163,4 +262,5 @@ void SpringSystem::Render(GLSLShader& shader) {
     glBindBuffer(GL_ARRAY_BUFFER, springs_vbo_);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numLines, lineArray, GL_STREAM_DRAW);
     glDrawArrays(GL_LINES, 0, numLines);
+    */
 }

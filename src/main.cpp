@@ -53,11 +53,10 @@ int main(int arc, char** argv) {
     glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
             0, (void*) (QUAD_VERTS_SIZE + QUAD_NORMS_SIZE));
 
-    SpringSystem springSystem = SpringSystem(10, 10, 250, 20);
-    springSystem.Setup(shader);
 
-    glLineWidth(2);
-    // glEnable(GL_LINE_SMOOTH);
+    SpringSystem springSystem = SpringSystem(30, 30, 550, 150);
+    springSystem.Setup();
+
 
     bool quit = false;
     SDL_Event event;
@@ -77,16 +76,16 @@ int main(int arc, char** argv) {
         float dt = fpsC.GetDT();
         camera.Update(dt);
 
-        for (int i = 0; i < 1; i++) {
-            springSystem.Update(0.001);
+        for (int i = 0; i < 10; i++) {
+            springSystem.Update(0.0001);
         }
-
 
         // draw
         glClearColor(1, 1, 1, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUniformMatrix4fv(shader["VP"], 1,  GL_FALSE, value_ptr(camera.VP()));
 
+		shader.Enable();
+        glUniformMatrix4fv(shader["VP"], 1,  GL_FALSE, value_ptr(camera.VP()));
         mat4 model(1);
         glBindVertexArray(quad_vao);
         model = translate(model, vec3(0, -10, 0));
@@ -98,7 +97,7 @@ int main(int arc, char** argv) {
         glUniform1i(shader["textured"], true);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        springSystem.Render(shader);
+        springSystem.Render(camera.VP());
 
         fpsC.EndFrame();
         SDL_GL_SwapWindow(window);

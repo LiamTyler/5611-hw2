@@ -20,17 +20,25 @@ typedef struct Node {
 
 } Node;
 
+#define CLOTH_VERTS 0
+#define CLOTH_NORMS 1
+#define CLOTH_TEX_COORDS 2
+#define CLOTH_INDICES 3
+#define CLOTH_TOTAL_VBOS 4
+
 class SpringSystem {
     public:
         SpringSystem();
         SpringSystem(int dimx, int dimy, double ks, double kd);
-        void Setup(GLSLShader& shader);
+        void Setup();
         void SpringSetup();
-        void GLSetup(GLSLShader& shader);
+        void GLSetup();
         void Update(double dt);
-        void Render(GLSLShader& shader);
+        void Render(const mat4& VP);
         Node& GetNode(int r, int c) { return nodes_[r*dimX_ + c]; }
 
+        void GetPositions();
+        // void RecalculateNormals();
         int DimX() { return dimX_; }
         int DimY() { return dimY_; }
 
@@ -46,11 +54,22 @@ class SpringSystem {
         double mass_;
         double restLength_;
 
+        int numNodes_;
+        int numTris_;
+        bool textured_;
+        vec3* posArray_;
+        //vec3* normals_;
+        vec2* texCoords_;
+        unsigned int* indices_;
+
         // opengl shit
-        GLuint cube_vao_;
-        GLuint cube_vbo_;
-        GLuint springs_vao_;
-        GLuint springs_vbo_;
+        GLSLShader shader_;
+        GLint cloth_texture_;
+        GLuint cloth_vao_;
+        GLuint cloth_vbos_[CLOTH_TOTAL_VBOS];
+        GLuint cloth_vert_vbo_;
+        GLuint cloth_tex_vbo_;
+        GLuint cloth_element_buffer_;
 };
 
 #endif  // SRC_INCLUDE_SPRING_SYSTEM_H_
