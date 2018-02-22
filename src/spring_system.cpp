@@ -206,53 +206,51 @@ void SpringSystem::Update(double dt) {
     if (paused_)
         return;
 
-    highp_dvec3 accels[dimY_][dimX_];
+    highp_dvec3 forces[dimY_][dimX_];
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
-            accels[r][c] = GRAVITY * mass_;
+            forces[r][c] = GRAVITY * mass_;
         }
     }
+    // highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
+    // highp_dvec3 dampF = -KD_*dir*dot(n1.vel - n2.vel, dir);
     for (int r = 1; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);
             Node& n2 = GetNode(r - 1, c);
-            highp_dvec3 dpos = n1.pos - n2.pos;
-            double stringLen = length(dpos);
-            highp_dvec3 dir = normalize(dpos);
-            double stringF = -KS_*(stringLen - restLength_);
-            highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
-            highp_dvec3 acc = highp_dvec3(0, 0, 0);
-            acc += stringF * dir + dampF;
-            acc *= 1.0/mass_;
 
-            accels[r][c] += acc;
-            accels[r-1][c] -= acc;
+            double l = length(n1.pos - n2.pos);
+            highp_dvec3 e = normalize(n1.pos - n2.pos);
+            double v1 = dot(e, n1.vel);
+            double v2 = dot(e, n2.vel);
+            double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
+
+            forces[r][c] += f * e;
+            forces[r-1][c] -= f * e;
         }
     }
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 1; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);
             Node& n2 = GetNode(r, c - 1);
-            highp_dvec3 dpos = n1.pos - n2.pos;
-            double stringLen = length(dpos);
-            highp_dvec3 dir = normalize(dpos);
-            double stringF = -KS_*(stringLen - restLength_);
-            highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
-            highp_dvec3 acc = highp_dvec3(0, 0, 0);
-            acc += stringF * dir + dampF;
-            acc *= 1.0/mass_;
 
-            accels[r][c] += acc;
-            accels[r][c-1] -= acc;
+            double l = length(n1.pos - n2.pos);
+            highp_dvec3 e = normalize(n1.pos - n2.pos);
+            double v1 = dot(e, n1.vel);
+            double v2 = dot(e, n2.vel);
+            double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
+
+            forces[r][c] += f * e;
+            forces[r][c-1] -= f * e;
         }
     }
 
-    accels[0][0] = vec3(0, 0, 0);
-    accels[0][dimX_ - 1] = vec3(0, 0, 0);
+    forces[0][0] = vec3(0, 0, 0);
+    forces[0][dimX_ - 1] = vec3(0, 0, 0);
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
-            n.vel += accels[r][c] * dt;
+            n.vel += forces[r][c]/mass_ * dt;
             n.pos += n.vel * dt;
         }
     }
