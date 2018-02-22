@@ -12,7 +12,26 @@ using namespace std;
 bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& c);
 void callback(void* data);
 
-int main(int arc, char** argv) {
+int main(int argc, char** argv) {
+	int start_rows = 10;
+	int start_cols = 10;
+	int start_ks = 100;
+	int start_kd = 50;
+	if (argc > 1) {
+		start_rows = stoi(argv[1]);
+		if (argc > 2) {
+			start_cols = stoi(argv[2]);
+			if (argc > 3) {
+				start_ks = stoi(argv[3]);
+				if (argc > 4) {
+					start_kd = stoi(argv[4]);
+				}
+			}
+		}
+	}
+	for (int i = 0; i < argc; i++) {
+		cout << "argv[" << i << "]: " << argv[i] << endl;
+	}
     // initialize SDL and GLEW and set up window
     SDL_Window* window = InitAndWindow("Starter Project", 100, 100, 800, 600);
     cout << "vendor: " << glGetString(GL_VENDOR) << endl;
@@ -54,8 +73,8 @@ int main(int arc, char** argv) {
             0, (void*) (QUAD_VERTS_SIZE + QUAD_NORMS_SIZE));
 
 
-    SpringSystem springSystem = SpringSystem(30, 30, 550, 150);
-    springSystem.Setup();
+    SpringSystem springSystem = SpringSystem(start_rows, start_cols, start_ks, start_kd);
+	springSystem.Setup();
 
 
     bool quit = false;
@@ -113,8 +132,8 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
     bool quit = false;
     if (event.type == SDL_QUIT) {
         quit = true;
-    } else if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-        // key down events (wont repeat if holding key down)
+    } else if (event.type == SDL_KEYDOWN) { // && event.key.repeat == 0) {
+		bool print = false;
         switch (event.key.keysym.sym) {
             case SDLK_w:
                 camera.VelZ(1.0f);
@@ -137,12 +156,36 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
             case SDLK_SPACE:
                 break;
             case SDLK_LEFT:
+				{
+				// decrease KD
+				double k = std::fmax(1, ss.GetKD() - 10);
+				ss.SetKD(k);
+				}
+				print = true;
                 break;
             case SDLK_RIGHT:
+				{
+				// increase KD
+				double k = ss.GetKD() + 10;
+				ss.SetKD(k + 10);
+				}
+				print = true;
                 break;
             case SDLK_UP:
+				{
+				// increase KS
+				double k = ss.GetKS();
+				ss.SetKS(k + 10);
+				}
+				print = true;
                 break;
             case SDLK_DOWN:
+				{
+				// decrease KS
+				double k = std::fmax(1, ss.GetKS() - 10);
+				ss.SetKS(k);
+				}
+				print = true;
                 break;
             case SDLK_r:
 				ss.SpringSetup();
@@ -151,6 +194,10 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
 				ss.ChangeVizualization();
                 break;
         }
+		if (print) {
+			cout << "KS: " << ss.GetKS() << endl;
+			cout << "KD: " << ss.GetKD() << endl;
+		}
     } else if (event.type == SDL_KEYUP) {
         // handle key up events
         switch (event.key.keysym.sym) {

@@ -44,6 +44,11 @@ class SpringSystem {
         int DimX() { return dimX_; }
         int DimY() { return dimY_; }
 
+        double GetKS() { return KS_; }
+        double GetKD() { return KD_; }
+        void SetKS(double ks) { KS_ = ks; }
+        void SetKD(double kd) { KD_ = kd; }
+
     private:
         int dimX_;
         int dimY_;

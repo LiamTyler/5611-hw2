@@ -1,5 +1,6 @@
 #include "include/spring_system.h"
 #include "include/shape_vertices.h"
+#include <omp.h>
 
 #define RADIUS .2f
 #define GRAVITY highp_dvec3(0, -9.81, 0)
@@ -11,7 +12,7 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
     dimX_ = dimx;
     dimY_ = dimy;
     numNodes_ = dimX_ * dimY_;
-    numTris_ = 2 * (dimX_ - 1) * dimY_;
+    numTris_ = 2 * (dimX_ - 1) * (dimY_ - 1);
     nodes_ = new Node[numNodes_];
 
     textured_ = false;
@@ -19,11 +20,11 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
 
     KS_ = ks;
     KD_ = kd;
-    mass_ = .40;
+    mass_ = .5;
     restLength_ = 0.5;
 
-    initDX_ = 0.60;
-    initDY_ = 1.00;
+    initDX_ = restLength_;
+    initDY_ = restLength_;
 }
 
 void SpringSystem::SpringSetup() {
@@ -221,7 +222,7 @@ void SpringSystem::Update(double dt) {
             double stringF = -KS_*(stringLen - restLength_);
             highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
             highp_dvec3 acc = highp_dvec3(0, 0, 0);
-            acc += stringF * dir + dampF; // + GRAVITY * mass_;
+            acc += stringF * dir + dampF;
             acc *= 1.0/mass_;
 
             accels[r][c] += acc;
@@ -238,7 +239,7 @@ void SpringSystem::Update(double dt) {
             double stringF = -KS_*(stringLen - restLength_);
             highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
             highp_dvec3 acc = highp_dvec3(0, 0, 0);
-            acc += stringF * dir + dampF; // +  GRAVITY * mass_;
+            acc += stringF * dir + dampF;
             acc *= 1.0/mass_;
 
             accels[r][c] += acc;
