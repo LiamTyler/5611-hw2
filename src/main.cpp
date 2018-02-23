@@ -6,17 +6,18 @@
 #include "include/mesh.h"
 #include "include/shape_vertices.h"
 #include "include/spring_system.h"
+#include "include/sphere.h"
 
 using namespace std;
 
-bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& c);
+bool HandleInput(SDL_Event& event, float dt, SpringSystem& ss, Camera& c, Sphere& sphere);
 void callback(void* data);
 
 int main(int argc, char** argv) {
 	int start_rows = 10;
 	int start_cols = 10;
-	int start_ks = 100;
-	int start_kd = 50;
+	int start_ks = 500;
+	int start_kd = 100;
 	if (argc > 1) {
 		start_rows = stoi(argv[1]);
 		if (argc > 2) {
@@ -72,6 +73,30 @@ int main(int argc, char** argv) {
     glVertexAttribPointer(shader["texCoords"], 2, GL_FLOAT, GL_FALSE,
             0, (void*) (QUAD_VERTS_SIZE + QUAD_NORMS_SIZE));
 
+	Mesh* sphereMesh = new Mesh;
+	sphereMesh->LoadMesh("models/sphere.obj");
+	GLuint sphere_vao;
+	GLuint sphere_vbos[3];
+	glGenVertexArrays(1, &sphere_vao);
+	glBindVertexArray(sphere_vao);
+	glGenBuffers(3, sphere_vbos);
+	glBindBuffer(GL_ARRAY_BUFFER, sphere_vbos[0]);
+	glBufferData(GL_ARRAY_BUFFER, sphereMesh->GetNumVertices() * sizeof(vec3),
+			sphereMesh->GetVertices(), GL_STATIC_DRAW);
+	glEnableVertexAttribArray(shader["verts"]);
+	glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, sphere_vbos[1]);
+	glBufferData(GL_ARRAY_BUFFER, sphereMesh->GetNumVertices() * sizeof(vec3),
+			sphereMesh->GetNormals(), GL_STATIC_DRAW);
+	glEnableVertexAttribArray(shader["normals"]);
+	glVertexAttribPointer(shader["normals"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphere_vbos[2]);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereMesh->GetNumTriangles() * sizeof(ivec3),
+			sphereMesh->GetIndices(), GL_STATIC_DRAW);
+
+	Sphere sphere(glm::vec3(0, 0, 2), 1);
 
     SpringSystem springSystem = SpringSystem(start_rows, start_cols, start_ks, start_kd);
 	springSystem.Setup();
@@ -84,16 +109,18 @@ int main(int argc, char** argv) {
     fpsC.Init();
     fpsC.CallBack(callback);
     while (!quit) {
-        // Process all input events
-        while (SDL_PollEvent(&event) && !quit) {
-            quit = HandleInput(event, springSystem, camera);
-		}
-
-        // update
         float t = SDL_GetTicks() / 1000.0f;
         fpsC.StartFrame(t);
         float dt = fpsC.GetDT();
+
+        // Process all input events
+        while (SDL_PollEvent(&event) && !quit) {
+            quit = HandleInput(event, dt, springSystem, camera, sphere);
+		}
+
+        // update
         camera.Update(dt);
+		sphere.Update(dt);
 
         for (int i = 0; i < 10; i++) {
             springSystem.Update(0.0001);
@@ -116,6 +143,13 @@ int main(int argc, char** argv) {
         glUniform1i(shader["textured"], true);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
+		glBindVertexArray(sphere_vao);
+		model = sphere.GetModelMatrix();
+        glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+        glUniform1i(shader["textured"], false);
+        glDrawElements(GL_TRIANGLES, sphereMesh->GetNumTriangles() * 3, GL_UNSIGNED_INT, 0);
+
+
         springSystem.Render(camera.VP());
 
         fpsC.EndFrame();
@@ -128,7 +162,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
+bool HandleInput(SDL_Event& event, float dt, SpringSystem& ss, Camera& camera, Sphere& sphere) {
     bool quit = false;
     if (event.type == SDL_QUIT) {
         quit = true;
@@ -147,6 +181,38 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
             case SDLK_d:
                 camera.VelX(1.0f);
                 break;
+            case SDLK_i:
+				{
+				// increase KS
+				double k = ss.GetKS();
+				ss.SetKS(k + 10);
+				}
+				print = true;
+                break;
+            case SDLK_k:
+				{
+				// decrease KS
+				double k = std::fmax(1, ss.GetKS() - 10);
+				ss.SetKS(k);
+				}
+				print = true;
+                break;
+            case SDLK_l:
+				{
+				// increase KD
+				double k = ss.GetKD() + 10;
+				ss.SetKD(k + 10);
+				}
+				print = true;
+                break;
+            case SDLK_j:
+				{
+				// decrease KD
+				double k = std::fmax(1, ss.GetKD() - 10);
+				ss.SetKD(k);
+				}
+				print = true;
+                break;
             case SDLK_ESCAPE:
                 quit = true;
                 break;
@@ -156,36 +222,16 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
             case SDLK_SPACE:
                 break;
             case SDLK_LEFT:
-				{
-				// decrease KD
-				double k = std::fmax(1, ss.GetKD() - 10);
-				ss.SetKD(k);
-				}
-				print = true;
+				sphere.velocity.x = -1;
                 break;
             case SDLK_RIGHT:
-				{
-				// increase KD
-				double k = ss.GetKD() + 10;
-				ss.SetKD(k + 10);
-				}
-				print = true;
+				sphere.velocity.x = 1;
                 break;
             case SDLK_UP:
-				{
-				// increase KS
-				double k = ss.GetKS();
-				ss.SetKS(k + 10);
-				}
-				print = true;
+				sphere.velocity.z = -1;
                 break;
             case SDLK_DOWN:
-				{
-				// decrease KS
-				double k = std::fmax(1, ss.GetKS() - 10);
-				ss.SetKS(k);
-				}
-				print = true;
+				sphere.velocity.z = 1;
                 break;
             case SDLK_r:
 				ss.SpringSetup();
@@ -211,6 +257,18 @@ bool HandleInput(SDL_Event& event, SpringSystem& ss, Camera& camera) {
                 break;
             case SDLK_SPACE:
                 break;
+			case SDLK_LEFT:
+				sphere.velocity.x = 0;
+				break;
+			case SDLK_RIGHT:
+				sphere.velocity.x = 0;
+				break;
+			case SDLK_UP:
+				sphere.velocity.z = 0;
+				break;
+			case SDLK_DOWN:
+				sphere.velocity.z = 0;
+				break;
         }
     } else if (event.type == SDL_MOUSEMOTION) {
         // handle mouse events

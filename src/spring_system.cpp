@@ -212,8 +212,6 @@ void SpringSystem::Update(double dt) {
             forces[r][c] = GRAVITY * mass_;
         }
     }
-    // highp_dvec3 dampF = -KD_*(n1.vel - n2.vel);
-    // highp_dvec3 dampF = -KD_*dir*dot(n1.vel - n2.vel, dir);
     for (int r = 1; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);

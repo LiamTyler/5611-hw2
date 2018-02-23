@@ -1,25 +1,29 @@
-#ifndef SRC_INCLUDE_MESH_H_
-#define SRC_INCLUDE_MESH_H_
+#ifndef INCLUDE_MESH_H_
+#define INCLUDE_MESH_H_
 
-#include "include/OBJ_Loader.h"
-#include "glm/glm.hpp"
-
-using glm::vec3;
-using glm::ivec3;
+#include "include/utils.h"
 
 class Mesh {
     public:
         Mesh();
-        Mesh(const std::string& filename);
+        Mesh(unsigned int numV, unsigned int numT, glm::vec3* verts,
+                glm::vec3* norms, glm::ivec3* indices);
         ~Mesh();
 
-        void LoadMesh(const std::string& filename);
+        bool LoadMesh(const std::string& fname);
 
-        unsigned int numVertices;
-        unsigned int numTriangles;
-        glm::vec3* vertices;
-        glm::vec3* normals;
-        glm::ivec3* indices;
+        unsigned int GetNumVertices() const { return numVertices_; }
+        unsigned int GetNumTriangles() const { return numTriangles_; }
+        glm::vec3* GetVertices() const { return vertices_; }
+        glm::vec3* GetNormals() const { return normals_; }
+        glm::ivec3* GetIndices() const { return indices_; }
+
+    private:
+        unsigned int numVertices_;
+        unsigned int numTriangles_;
+        glm::vec3* vertices_;
+        glm::vec3* normals_;
+        glm::ivec3* indices_;
 };
 
-#endif  // SRC_INCLUDE_MESH_H_
+#endif  // INCLUDE_MESH_H_
