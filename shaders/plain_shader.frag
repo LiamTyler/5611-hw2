@@ -11,6 +11,7 @@ out vec4 color;
 
 const float ambient = .1;
 const vec3 lightDir = normalize(vec3(1, 1, 1));
+// const vec3 lightDir = normalize(vec3(.5, .1, 1));
 
 void main() {
     vec3 outColor = vec3(0, 0, 0);
@@ -23,6 +24,7 @@ void main() {
     }
 
     vec3 n = normalize(normal);
+    outColor += ambient * objColor;
     outColor += max(0.0, dot(lightDir, n)) * objColor;
 
     color = vec4(outColor, 1);

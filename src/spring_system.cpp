@@ -3,7 +3,7 @@
 #include <omp.h>
 
 #define RADIUS .2f
-#define GRAVITY highp_dvec3(0, -9.81, 0)
+#define GRAVITY vec3(0, -9.81, 0)
 
 SpringSystem::SpringSystem() :
     SpringSystem(10, 10, 50, 10) {}
@@ -20,20 +20,25 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
 
     KS_ = ks;
     KD_ = kd;
-    mass_ = .5;
-    restLength_ = 0.5;
+    mass_ = 0.1;
+    restLength_ = 0.05;
 
     initDX_ = restLength_;
     initDY_ = restLength_;
+    drag_ = true;
+    wind_ = vec3(0, 0, -.5) * 0;
+    stuck = true;
 }
 
-void SpringSystem::SpringSetup() {
+void SpringSystem::SpringSetup(bool vertical) {
     for (int r = 0; r < dimY_; r++) {
         for (int c = 0; c < dimX_; c++) {
             Node& n = GetNode(r, c);
-            n.pos = highp_dvec3(c * initDX_, 5 - r*initDY_, 0);
-            if (r != 0)
-                n.vel = highp_dvec3(0, 0, 0);
+            if (vertical)
+                n.pos = vec3(c * initDX_, 5 - r*initDY_, 0);
+            else
+                n.pos = vec3(c * initDX_, 5, r*initDY_);
+            n.vel = vec3(0, 0, 0);
         }
     }
 }
@@ -45,11 +50,13 @@ void SpringSystem::UpdateGPUPositions() {
             posArray_[r*dimX_ + c] = n.pos;
         }
     }
+    RecalculateNormals();
     glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_VERTS]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, &posArray_[0], GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_NORMS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, &normals_[0], GL_STREAM_DRAW);
 }
 
-/*
 void SpringSystem::RecalculateNormals() {
     // reset normals
     for (int r = 0; r < dimY_; r++)
@@ -57,6 +64,7 @@ void SpringSystem::RecalculateNormals() {
             normals_[r*dimX_ + c] = vec3(0, 0, 0);
 
     int i = 0;
+    #pragma omp parallel for
     for (unsigned int r = 0; r < dimY_ - 1; ++r) {
         for (unsigned int c = 0; c < dimX_ - 1; ++c) {
             vec3 ul = posArray_[indices_[i + 0]];
@@ -81,12 +89,11 @@ void SpringSystem::RecalculateNormals() {
         for (int c = 0; c < dimX_; c++)
             normals_[r*dimX_ + c] = normalize(normals_[r*dimX_ + c]);
 }
-*/
 
 void SpringSystem::GLSetup() {
     // allocate and fill buffers
     posArray_ = new vec3[numNodes_];
-    // normals_ = new vec3[numNodes_];
+    normals_ = new vec3[numNodes_];
     texCoords_ = new vec2[numNodes_];
     indices_ = new unsigned int[3 * numTris_];
 
@@ -121,8 +128,10 @@ void SpringSystem::GLSetup() {
     cloth_shader_.CreateAndLinkProgram();
     cloth_shader_.Enable();
     cloth_shader_.AddAttribute("inPos");
+    cloth_shader_.AddAttribute("inNormal");
     cloth_shader_.AddAttribute("texCoords");
     cloth_shader_.AddUniform("VP");
+    cloth_shader_.AddUniform("normalMatrix");
     cloth_shader_.AddUniform("tex");
 
     cloth_texture_ = LoadTexture("textures/blue_cloth.jpg");
@@ -136,6 +145,11 @@ void SpringSystem::GLSetup() {
     glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, NULL, GL_STREAM_DRAW);
     glEnableVertexAttribArray(cloth_shader_["inPos"]);
     glVertexAttribPointer(cloth_shader_["inPos"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // normals 
+    glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_NORMS]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * numNodes_, NULL, GL_STREAM_DRAW);
+    glEnableVertexAttribArray(cloth_shader_["inNormal"]);
+    glVertexAttribPointer(cloth_shader_["inNormal"], 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     // tex coords
     glBindBuffer(GL_ARRAY_BUFFER, cloth_vbos_[CLOTH_TEX_COORDS]);
@@ -198,7 +212,7 @@ void SpringSystem::GLSetup() {
 }
 
 void SpringSystem::Setup() {
-    SpringSetup();
+    SpringSetup(true);
     GLSetup();
 }
 
@@ -206,19 +220,62 @@ void SpringSystem::Update(double dt) {
     if (paused_)
         return;
 
-    highp_dvec3 forces[dimY_][dimX_];
+    vec3 forces[dimY_][dimX_];
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
-            forces[r][c] = GRAVITY * mass_;
+            forces[r][c] = GRAVITY * mass_ + wind_;
         }
     }
+    // drag force
+    #pragma omp parallel for
+    for (unsigned int r = 0; r < dimY_ - 1; ++r) {
+        for (unsigned int c = 0; c < dimX_ - 1; ++c) {
+            Node& ul = GetNode(r, c);
+            Node& ll = GetNode(r + 1, c);
+            Node& ur = GetNode(r, c + 1);
+            Node& lr = GetNode(r + 1, c + 1);
+
+            float pc = 10;
+            vec3 n, v, force;
+            float a;
+            // first triangle
+            v = (ul.vel + ur.vel + ll.vel) / 3.0f - wind_;
+            n = cross(ll.pos - ul.pos, ur.pos - ul.pos);
+            force = -.5*pc*(length(v)*dot(v, n))*n/(2*length(n));
+            if (drag_) {
+                force *= 1;
+            } else {
+                force *= 0;
+            }
+            forces[r][c] += force / 3;
+            forces[r+1][c] += force / 3;
+            forces[r][c+1] += force / 3;
+
+            // second triangle
+            v = (lr.vel + ur.vel + ll.vel) / 3.0f - wind_;
+            n = cross(ur.pos - lr.pos, ll.pos - lr.pos);
+            force = -.5*pc*(length(v)*dot(v, n))*n/(2*length(n));
+            if (drag_) {
+                force *= 1;
+            } else {
+                force *= 0;
+            }
+            forces[r+1][c] += force / 3;
+            forces[r][c+1] += force / 3;
+            forces[r+1][c+1] += force / 3;
+        }
+    }
+    for (int r = 0; r < dimY_; r++)
+        for (int c = 0; c < dimX_; c++)
+            normals_[r*dimX_ + c] = normalize(normals_[r*dimX_ + c]);
+    #pragma omp parallel for
     for (int r = 1; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);
             Node& n2 = GetNode(r - 1, c);
 
             double l = length(n1.pos - n2.pos);
-            highp_dvec3 e = normalize(n1.pos - n2.pos);
+            vec3 e = normalize(n1.pos - n2.pos);
             double v1 = dot(e, n1.vel);
             double v2 = dot(e, n2.vel);
             double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
@@ -227,13 +284,14 @@ void SpringSystem::Update(double dt) {
             forces[r-1][c] -= f * e;
         }
     }
+    #pragma omp parallel for
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 1; c < dimX_; ++c) {
             Node& n1 = GetNode(r, c);
             Node& n2 = GetNode(r, c - 1);
 
             double l = length(n1.pos - n2.pos);
-            highp_dvec3 e = normalize(n1.pos - n2.pos);
+            vec3 e = normalize(n1.pos - n2.pos);
             double v1 = dot(e, n1.vel);
             double v2 = dot(e, n2.vel);
             double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
@@ -243,8 +301,14 @@ void SpringSystem::Update(double dt) {
         }
     }
 
-    forces[0][0] = vec3(0, 0, 0);
-    forces[0][dimX_ - 1] = vec3(0, 0, 0);
+    // for (int c = 0; c < dimX_; ++c) {
+    //     forces[0][c] = vec3(0, 0, 0);
+    // }
+    if (stuck) {
+        forces[0][0] = vec3(0, 0, 0);
+        forces[0][dimX_ - 1] = vec3(0, 0, 0);
+    }
+    #pragma omp parallel for
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
@@ -254,7 +318,25 @@ void SpringSystem::Update(double dt) {
     }
 }
 
-void SpringSystem::Render(const mat4& VP) {
+void SpringSystem::HandleCollisions(Sphere& sphere) {
+    for (int r = 0; r < dimY_; ++r) {
+        for (int c = 0; c < dimX_; ++c) {
+            Node& n = GetNode(r, c);
+            double d = glm::length(n.pos - sphere.position);
+            if (d < sphere.radius + .09) {
+                vec3 normal = glm::normalize(n.pos - sphere.position);
+                vec3 bounce = dot(n.vel, normal) * normal;
+                n.vel -= 1.5 * bounce;
+                // n.pos += normal * (.2 + sphere.radius - d);
+                // n.vel = -n.vel;
+                n.pos = sphere.position + (.1 + sphere.radius) * normal;
+            }
+        }
+    }
+}
+
+void SpringSystem::Render(const mat4& V, const mat4& P) {
+    mat4 VP = P * V;
     UpdateGPUPositions();
     if (textured_) {
         cloth_shader_.Enable();
@@ -262,6 +344,8 @@ void SpringSystem::Render(const mat4& VP) {
         glBindVertexArray(cloth_vao_);
 
         glUniformMatrix4fv(cloth_shader_["VP"], 1, GL_FALSE, value_ptr(VP));
+        mat4 nM = transpose(inverse(V));
+        glUniformMatrix4fv(cloth_shader_["normalMatrix"], 1, GL_FALSE, value_ptr(nM));
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, cloth_texture_);
         glUniform1i(cloth_shader_["tex"], 0);
@@ -277,7 +361,7 @@ void SpringSystem::Render(const mat4& VP) {
                 vec3 pos = GetNode(r, c).pos;
                 mat4 model(1);
                 model = translate(model, pos);
-                model = scale(model, .2f * vec3(1, 1, 1));
+                model = scale(model, vec3(.5 *restLength_));
                 glUniformMatrix4fv(spring_shader_["model"], 1, GL_FALSE, value_ptr(model));
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }

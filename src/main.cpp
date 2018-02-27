@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 		cout << "argv[" << i << "]: " << argv[i] << endl;
 	}
     // initialize SDL and GLEW and set up window
-    SDL_Window* window = InitAndWindow("Starter Project", 100, 100, 800, 600);
+    SDL_Window* window = InitAndWindow("Cloth Simulation", 100, 100, 800, 600);
     cout << "vendor: " << glGetString(GL_VENDOR) << endl;
     cout << "renderer: " << glGetString(GL_RENDERER) << endl;
     cout << "version: " << glGetString(GL_VERSION) << endl;
@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
 
     shader.AddUniform("model");
     shader.AddUniform("VP");
+    shader.AddUniform("normalMatrix");
     shader.AddUniform("textured");
 
     GLuint texture = LoadTexture("textures/wood_floor.jpg");
@@ -96,7 +97,21 @@ int main(int argc, char** argv) {
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereMesh->GetNumTriangles() * sizeof(ivec3),
 			sphereMesh->GetIndices(), GL_STATIC_DRAW);
 
-	Sphere sphere(glm::vec3(0, 0, 2), 1);
+	/*
+	GLuint cube_vao;
+	GLuint cube_vbos[1];
+	glGenVertexArrays(1, &cube_vao);
+	glBindVertexArray(cube_vao);
+	glGenBuffers(1, cube_vbos);
+	glBindBuffer(GL_ARRAY_BUFFER, cube_vbos[0]);
+	glBufferData(GL_ARRAY_BUFFER, CUBE_VERTS_SIZE + CUBE_NORMS_SIZE, cube_data, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(shader["verts"]);
+	glVertexAttribPointer(shader["verts"], 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(shader["normals"]);
+	glVertexAttribPointer(shader["normals"], 3, GL_FLOAT, GL_FALSE, 0, (void*)CUBE_VERTS_SIZE);
+	*/
+
+	Sphere sphere(glm::vec3(2.5, 2.5, 2.5), 1);
 
     SpringSystem springSystem = SpringSystem(start_rows, start_cols, start_ks, start_kd);
 	springSystem.Setup();
@@ -122,9 +137,11 @@ int main(int argc, char** argv) {
         camera.Update(dt);
 		sphere.Update(dt);
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 15; i++) {
             springSystem.Update(0.0001);
+			springSystem.HandleCollisions(sphere);
         }
+
 
         // draw
         glClearColor(1, 1, 1, 0);
@@ -137,6 +154,8 @@ int main(int argc, char** argv) {
         model = translate(model, vec3(0, -10, 0));
         model = scale(model, vec3(50, 1, 50));
         glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+		mat4 nM = transpose(inverse(camera.View() * model));
+        glUniformMatrix4fv(shader["normalMatrix"], 1,  GL_FALSE, value_ptr(nM));
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         glUniform1i(shader["tex"], 0);
@@ -146,11 +165,20 @@ int main(int argc, char** argv) {
 		glBindVertexArray(sphere_vao);
 		model = sphere.GetModelMatrix();
         glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+		nM = transpose(inverse(camera.View() * model));
+        glUniformMatrix4fv(shader["normalMatrix"], 1,  GL_FALSE, value_ptr(nM));
         glUniform1i(shader["textured"], false);
         glDrawElements(GL_TRIANGLES, sphereMesh->GetNumTriangles() * 3, GL_UNSIGNED_INT, 0);
 
+		/*
+		glBindVertexArray(cube_vao);
+		model = sphere.GetModelMatrix();
+        glUniformMatrix4fv(shader["model"], 1, GL_FALSE, value_ptr(model));
+        glUniform1i(shader["textured"], false);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+		*/
 
-        springSystem.Render(camera.VP());
+        springSystem.Render(camera.View(), camera.Proj());
 
         fpsC.EndFrame();
         SDL_GL_SwapWindow(window);
@@ -220,6 +248,11 @@ bool HandleInput(SDL_Event& event, float dt, SpringSystem& ss, Camera& camera, S
 				ss.Pause();
                 break;
             case SDLK_SPACE:
+				ss.Drag(!ss.Drag());
+				if (ss.Drag())
+					cout << "Drag is on" << endl;
+				else
+					cout << "Drag is off" << endl;
                 break;
             case SDLK_LEFT:
 				sphere.velocity.x = -1;
@@ -233,8 +266,14 @@ bool HandleInput(SDL_Event& event, float dt, SpringSystem& ss, Camera& camera, S
             case SDLK_DOWN:
 				sphere.velocity.z = 1;
                 break;
-            case SDLK_r:
-				ss.SpringSetup();
+            case SDLK_v:
+				ss.SpringSetup(true);
+                break;
+            case SDLK_x:
+				ss.stuck = !ss.stuck;
+                break;
+            case SDLK_h:
+				ss.SpringSetup(false);
                 break;
             case SDLK_c:
 				ss.ChangeVizualization();

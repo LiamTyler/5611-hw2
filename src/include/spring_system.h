@@ -3,11 +3,12 @@
 
 #include "include/utils.h"
 #include "include/glsl_shader.h"
+#include "include/sphere.h"
 
 typedef struct Node {
     Node() {
-        pos = highp_dvec3(0, 0, 0);
-        vel = highp_dvec3(0, 0, 0);
+        pos = vec3(0, 0, 0);
+        vel = vec3(0, 0, 0);
     }
 
     Node(vec3 p, vec3 v) {
@@ -15,8 +16,8 @@ typedef struct Node {
         vel = v;
     }
 
-    highp_dvec3 pos;
-    highp_dvec3 vel;
+    vec3 pos;
+    vec3 vel;
 
 } Node;
 
@@ -31,25 +32,31 @@ class SpringSystem {
         SpringSystem();
         SpringSystem(int dimx, int dimy, double ks, double kd);
         void Setup();
-        void SpringSetup();
+        void SpringSetup(bool vertical);
         void GLSetup();
         void Update(double dt);
-        void Render(const mat4& VP);
+        void Render(const mat4& V, const mat4& P);
+        void HandleCollisions(Sphere& sphere);
         Node& GetNode(int r, int c) { return nodes_[r*dimX_ + c]; }
 
         void ChangeVizualization() { textured_ = !textured_; }
         void Pause() { paused_ = !paused_; }
         void UpdateGPUPositions();
-        // void RecalculateNormals();
+        void RecalculateNormals();
         int DimX() { return dimX_; }
         int DimY() { return dimY_; }
+        void Drag(bool d) { drag_ = d; }
+        bool Drag() { return drag_; }
 
         double GetKS() { return KS_; }
         double GetKD() { return KD_; }
         void SetKS(double ks) { KS_ = ks; }
         void SetKD(double kd) { KD_ = kd; }
 
+        bool stuck;
     private:
+        vec3 wind_;
+        bool drag_;
         int dimX_;
         int dimY_;
         double KS_;
@@ -67,7 +74,7 @@ class SpringSystem {
         int numNodes_;
         int numTris_;
         vec3* posArray_;
-        // vec3* normals_;
+        vec3* normals_;
         vec2* texCoords_;
         unsigned int* indices_;
         vector<unsigned int> spring_indices_;
