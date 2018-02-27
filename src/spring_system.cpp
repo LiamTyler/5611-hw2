@@ -3,7 +3,7 @@
 #include <omp.h>
 
 #define RADIUS .2f
-#define GRAVITY vec3(0, -9.81, 0)
+#define GRAVITY highp_dvec3(0, -9.81, 0)
 
 SpringSystem::SpringSystem() :
     SpringSystem(10, 10, 50, 10) {}
@@ -21,13 +21,14 @@ SpringSystem::SpringSystem(int dimx, int dimy, double ks, double kd) {
     KS_ = ks;
     KD_ = kd;
     mass_ = 0.1;
-    restLength_ = 0.05;
+    restLength_ = 0.1;
 
     initDX_ = restLength_;
     initDY_ = restLength_;
     drag_ = true;
-    wind_ = vec3(0, 0, -.5) * 0;
+    wind_ = vec3(0, 0, -.5);
     stuck = true;
+    wind = 0;
 }
 
 void SpringSystem::SpringSetup(bool vertical) {
@@ -220,10 +221,10 @@ void SpringSystem::Update(double dt) {
     if (paused_)
         return;
 
-    vec3 forces[dimY_][dimX_];
+    highp_dvec3 forces[dimY_][dimX_];
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
-            forces[r][c] = GRAVITY * mass_ + wind_;
+            forces[r][c] = GRAVITY * mass_ + wind_ * wind;
         }
     }
     // drag force
@@ -235,11 +236,11 @@ void SpringSystem::Update(double dt) {
             Node& ur = GetNode(r, c + 1);
             Node& lr = GetNode(r + 1, c + 1);
 
-            float pc = 10;
-            vec3 n, v, force;
-            float a;
+            double pc = 10;
+            highp_dvec3 n, v, force;
+            double a;
             // first triangle
-            v = (ul.vel + ur.vel + ll.vel) / 3.0f - wind_;
+            v = (ul.vel + ur.vel + ll.vel) / 3.0 - wind_*wind;
             n = cross(ll.pos - ul.pos, ur.pos - ul.pos);
             force = -.5*pc*(length(v)*dot(v, n))*n/(2*length(n));
             if (drag_) {
@@ -247,12 +248,12 @@ void SpringSystem::Update(double dt) {
             } else {
                 force *= 0;
             }
-            forces[r][c] += force / 3;
-            forces[r+1][c] += force / 3;
-            forces[r][c+1] += force / 3;
+            forces[r][c] += force / 3.0;
+            forces[r+1][c] += force / 3.0;
+            forces[r][c+1] += force / 3.0;
 
             // second triangle
-            v = (lr.vel + ur.vel + ll.vel) / 3.0f - wind_;
+            v = (lr.vel + ur.vel + ll.vel) / 3.0 - wind_*wind;
             n = cross(ur.pos - lr.pos, ll.pos - lr.pos);
             force = -.5*pc*(length(v)*dot(v, n))*n/(2*length(n));
             if (drag_) {
@@ -260,9 +261,9 @@ void SpringSystem::Update(double dt) {
             } else {
                 force *= 0;
             }
-            forces[r+1][c] += force / 3;
-            forces[r][c+1] += force / 3;
-            forces[r+1][c+1] += force / 3;
+            forces[r+1][c] += force / 3.0;
+            forces[r][c+1] += force / 3.0;
+            forces[r+1][c+1] += force / 3.0;
         }
     }
     for (int r = 0; r < dimY_; r++)
@@ -275,7 +276,7 @@ void SpringSystem::Update(double dt) {
             Node& n2 = GetNode(r - 1, c);
 
             double l = length(n1.pos - n2.pos);
-            vec3 e = normalize(n1.pos - n2.pos);
+            highp_dvec3 e = normalize(n1.pos - n2.pos);
             double v1 = dot(e, n1.vel);
             double v2 = dot(e, n2.vel);
             double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
@@ -291,7 +292,7 @@ void SpringSystem::Update(double dt) {
             Node& n2 = GetNode(r, c - 1);
 
             double l = length(n1.pos - n2.pos);
-            vec3 e = normalize(n1.pos - n2.pos);
+            highp_dvec3 e = normalize(n1.pos - n2.pos);
             double v1 = dot(e, n1.vel);
             double v2 = dot(e, n2.vel);
             double f = -KS_*(l - restLength_) - KD_*(v1 - v2);
@@ -301,12 +302,12 @@ void SpringSystem::Update(double dt) {
         }
     }
 
-    // for (int c = 0; c < dimX_; ++c) {
-    //     forces[0][c] = vec3(0, 0, 0);
-    // }
     if (stuck) {
-        forces[0][0] = vec3(0, 0, 0);
-        forces[0][dimX_ - 1] = vec3(0, 0, 0);
+        // forces[0][0] = vec3(0, 0, 0);
+        // forces[0][dimX_ - 1] = vec3(0, 0, 0);
+        for (int c = 0; c < dimX_; ++c) {
+            forces[0][c] = vec3(0, 0, 0);
+        }
     }
     #pragma omp parallel for
     for (int r = 0; r < dimY_; ++r) {
@@ -322,10 +323,12 @@ void SpringSystem::HandleCollisions(Sphere& sphere) {
     for (int r = 0; r < dimY_; ++r) {
         for (int c = 0; c < dimX_; ++c) {
             Node& n = GetNode(r, c);
-            double d = glm::length(n.pos - sphere.position);
+            vec3 p = n.pos;
+            vec3 v = n.vel;
+            double d = glm::length(p - sphere.position);
             if (d < sphere.radius + .09) {
-                vec3 normal = glm::normalize(n.pos - sphere.position);
-                vec3 bounce = dot(n.vel, normal) * normal;
+                vec3 normal = glm::normalize(p - sphere.position);
+                vec3 bounce = dot(v, normal) * normal;
                 n.vel -= 1.5 * bounce;
                 // n.pos += normal * (.2 + sphere.radius - d);
                 // n.vel = -n.vel;

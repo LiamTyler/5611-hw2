@@ -272,6 +272,12 @@ bool HandleInput(SDL_Event& event, float dt, SpringSystem& ss, Camera& camera, S
             case SDLK_x:
 				ss.stuck = !ss.stuck;
                 break;
+            case SDLK_z:
+				if (ss.wind == 0)
+				   ss.wind = 1;
+				else
+					ss.wind = 0;
+                break;
             case SDLK_h:
 				ss.SpringSetup(false);
                 break;

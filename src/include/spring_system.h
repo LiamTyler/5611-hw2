@@ -16,8 +16,8 @@ typedef struct Node {
         vel = v;
     }
 
-    vec3 pos;
-    vec3 vel;
+    highp_dvec3 pos;
+    highp_dvec3 vel;
 
 } Node;
 
@@ -54,8 +54,9 @@ class SpringSystem {
         void SetKD(double kd) { KD_ = kd; }
 
         bool stuck;
+        double wind;
     private:
-        vec3 wind_;
+        highp_dvec3 wind_;
         bool drag_;
         int dimX_;
         int dimY_;

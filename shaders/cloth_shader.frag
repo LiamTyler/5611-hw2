@@ -8,8 +8,8 @@ uniform sampler2D tex;
 
 out vec4 color;
 
-const float ambient = .3;
-const vec3 lightDir = normalize(vec3(1,1,1));
+const float ambient = .1;
+const vec3 lightDir = normalize(vec3(0,1,1));
 // const vec3 lightDir = normalize(vec3(0, 1, 0));
 
 void main() {
